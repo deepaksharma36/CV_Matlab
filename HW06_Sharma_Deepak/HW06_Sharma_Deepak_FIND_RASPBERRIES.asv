@@ -1,0 +1,151 @@
+%author professor Kinsman, Deepak Sharma
+function  HW06_Sharma_Deepak_FIND_RASPBERRIES( filename )
+
+close all;
+%disp(input)
+addpath( '../TEST_IMAGES' );
+%set Interactive to 0 for using previously collected sample points
+im_rgb_ne=imread(filename);
+im_rgb_new=im2double(im_rgb_new);
+
+
+INTERACTIVE = 0;
+    % if number of argument for funtion is less than 1 then
+    if nargin < 1
+      % disp('No Input')
+     
+    end
+    %collecting forground and Background data Points
+    if  INTERACTIVE
+        
+       
+        %applying gussian fiter before collecting data points
+        %so that sample points do not have noise
+        %H = fspecial('gaussian');
+        %im_rgb_test = imfilter(im_rgb_test,H);
+        %figure('Position',[10 10 1024 768]);
+        %imshow( im_rgb );
+        fprintf('SELECT FOREGROUND OBJECT ... ');
+        fprintf('Click on points to capture positions:  Hit return to end...\n');
+        [x_fg, y_fg] = ginput();
+        fprintf('SELECT BACKGROUND OBJECT ... ');
+        fprintf('Click on points to capture positions:  Hit return to end...\n');
+        [x_bg, y_bg] = ginput();
+        %saving data points in a temp variable
+        
+        save Rasberries_data;
+       
+    else
+    
+        
+    
+        %figure('Name','Input Image'),imshow(im_rgb);
+        %H = fspecial('gaussian');
+        %im_rgb = imfilter(im_rgb,H);
+        load Rasberries_data;
+
+    end
+    
+    clear im_rgb;
+    im_rgb=imread(filename);
+    %figure('Name','why'),imshow(im_rgb);
+    %coverting image to hsv
+    %
+    im_rgb      = im2double( im_rgb );
+    im_hue      = im_rgb(:,:,1);
+    im_sat    = im_rgb(:,:,2);
+    
+    %adjesting hue values to the one side of the axis for hue
+    %for x=1:size(im_hue,1
+     %   for y=1:size(im_hue,2)     %      if(im_hue(x,y)>abs(1-im_hue(x,y)))
+    %         im_hue(x,y)=abs(1-im_hue(x,y));
+    %       end
+    %end
+    % end
+    %storing indices of the points in a linear vector 
+    %sub2ind for coordinate (A,B) return A*numberofRows+B
+    fg_indices  = sub2ind( size(im_hue), round(y_fg), round(x_fg) );
+    
+    fg_hues     = im_hue( fg_indices );
+    fg_sat   = im_sat( fg_indices );
+    
+    bg_indices  = sub2ind( size(im_hue), round(y_bg), round(x_bg) );
+    bg_hues     = im_hue( bg_indices );
+    bg_sat   = im_sat( bg_indices );
+    
+    figure('Position',[10 10 1024 768]);
+    plot( fg_hues, fg_sat, 'rs', 'MarkerFaceColor', 'r', 'MarkerSize', 16  );
+    hold on;
+    plot( bg_hues, bg_sat, 'bo', 'MarkerFaceColor', 'b', 'MarkerSize', 16  );
+    xlabel( 'Shifted HUE ', 'FontSize', 12 );
+    ylabel( 'Saturation ', 'FontSize', 12 );
+    title(' Hue Vs Saturation', 'FontSize', 12 );
+    % This forms a matrix of the two features for foreground
+    fg_ab       = [ fg_hues fg_sat ];   
+    % This forms a matrix of the two features for background
+    bg_ab       = [ bg_hues bg_sat ];   
+%    disp(cov_bg)
+    im_ab       = [ im_hue(:) im_sat(:) ];
+    %calculating mahanalobus feature distance of each pixel from
+    % forground pixels
+    mahal_fg    = ( mahal( im_ab, fg_ab ) ) .^ (1/2);
+    %calculating mahanalobus feature distance of each pixel from
+    % background pixels
+    mahal_bg    = ( mahal( im_ab, bg_ab ) ) .^ (1/2);
+    
+    %
+    %  Classify as Class 0 (foreground object) if distance to FG is < distance to BG.
+ 
+    class_0     = mahal_fg < mahal_bg;
+    %converting col vector back to 2 D image Matrix
+    class_im    = reshape( class_0, size(im_hue,1), size(im_hue,2) );
+    
+    figure('Position',[10 10 1024 768]);
+    subplot(2,2,1);
+    imagesc(im_rgb);
+    axis image;
+    title('Test Image ', 'FontSize', 10, 'FontWeight', 'bold' );
+    
+    subplot(2,2,2);
+    imagesc( class_im );
+    axis image;
+    colormap(gray);
+    title('Class 0 representation', 'FontSize', 20, 'FontWeight', 'bold' );
+    
+    subplot(2,2,3);
+    fg_dists        = mahal_fg;
+    fg_dists_cls0   = fg_dists( class_0 );  
+    mmax            = max( fg_dists_cls0 );
+    mmin            = min( fg_dists_cls0 );
+    edges           = mmin : (mmax-mmin)/100 : mmax;
+    [freqs bins]    = histc( fg_dists, edges );
+    bar( edges, freqs );
+    aa = axis();
+    title('Histogram of Class 0 (mahanlobus distance vs number of pixel)', 'FontSize', 10, 'FontWeight', 'bold' );
+    
+    %
+    %  Form a model of the foreground Mahalanobis distance:
+    %
+    fg_dists        = mahal_fg;
+    fg_dists_cls0   = fg_dists(class_0);
+    dist_mean       = mean( fg_dists_cls0 );
+    dist_std_01     = std(  fg_dists_cls0 );
+    
+    %beautiful work by professor Kinsman :)
+    % Toss everything outside of one standard deviation, and re-adjust the mean value:
+    b_inliers       = ( fg_dists_cls0 <= (dist_mean + 1*dist_std_01) ) & ( fg_dists_cls0 >= (dist_mean - 1*dist_std_01));
+    the_inliers     = fg_dists_cls0( b_inliers );
+    dist_mean       = mean( the_inliers );
+    dist_std = std(the_inliers);
+    %
+    %
+    %threshold       = the_inliers<dist_mean;
+    distance_of_interest =fg_dists<dist_mean;
+    % Change the shape of the classification to look like an image:
+    class_im = reshape( distance_of_interest, size(im_hue,1), size(im_hue,2));
+    subplot(2,2,4);
+    imagesc( class_im );
+    title('Final ', 'FontSize', 20, 'FontWeight', 'bold' );
+    
+end
+
